@@ -1,137 +1,144 @@
 # class to load GW-BASIC programs
-import struct
 from gwbasic_tokens import tokens
 
+
 # Parse an encoded float or double. GW-BASIC uses a strange, non-standard
-# format. See http://www.chebucto.ns.ca/~af380/GW-BASIC-tokens.html for details.
+# format. See http://www.chebucto.ns.ca/~af380/GW-BASIC-tokens.html for
+# details.
 def ParseFloat(bytes):
-  exp = bytes[3] - 0x80
-  sgn = (bytes[2] & 0x80) >> 8
-  mantissa = 0.5 + 1.0 * (((bytes[2] & 0x7f) << 16) + (bytes[1] << 8) + bytes[0]) / 2**24
-  return (-1)**sgn * 2**exp * mantissa
+    exp = bytes[3] - 0x80
+    sgn = (bytes[2] & 0x80) >> 8
+    mantissa = 0.5 + 1.0 * (((bytes[2] & 0x7f) << 16) + (bytes[1] << 8) + bytes[0]) / 2**24
+    return (-1)**sgn * 2**exp * mantissa
+
 
 def ParseDouble(bytes):
-  return "<unparsed double>"
-  #return struct.unpack("!d", ''.join([chr(x) for x in bytes[8::-1]]))
+    return "<unparsed double>"
+    # return struct.unpack("!d", ''.join([chr(x) for x in bytes[8::-1]]))
 
-# class representing a single line of a GW-BASIC program
+
 class gwbasicline:
-  def __init__(self):
-    pass
+    """class representing a single line of a GW-BASIC program"""
+    def __init__(self):
+        pass
 
-  @staticmethod
-  def FromBinary(bytes):
-    """Forms a new line from the first line contained in the bytestream.
-    Returns a tuple, [gwbasicline, #bytes consumed]. On error returns None."""
-    self = gwbasicline()
+    @staticmethod
+    def FromBinary(bytes):
+        """Forms a new line from the first line contained in the bytestream.
+        Returns a tuple, [gwbasicline, #bytes consumed]. On error returns None."""
+        self = gwbasicline()
 
-    # first two bytes are address of next line. Mostly irrelevant, but if
-    # they're both zero, this is the end of the program.
-    if bytes[0] == 0 and bytes[1] == 0:
-      return [None, 2]
-    if len(bytes) < 4:
-      raise ValueError("Unexpected end of string.")
+        # first two bytes are address of next line. Mostly irrelevant, but if
+        # they're both zero, this is the end of the program.
+        if bytes[0] == 0 and bytes[1] == 0:
+            return [None, 2]
+        if len(bytes) < 4:
+            raise ValueError("Unexpected end of string.")
 
-    # next two bytes are the line number
-    self._line_no = 0x100 * bytes[3] + bytes[2]
-    pos = 4
-    self._data = []
-    # TODO(danvk): be more graceful at unexpected end-of-string
-    # TODO(danvk): get signed/unsigned correct
-    while bytes[pos] != 0:
-      code = bytes[pos]
+        # next two bytes are the line number
+        self._line_no = 0x100 * bytes[3] + bytes[2]
+        pos = 4
+        self._data = []
+        # TODO(danvk): be more graceful at unexpected end-of-string
+        # TODO(danvk): get signed/unsigned correct
+        while bytes[pos] != 0:
+            code = bytes[pos]
 
-      if code >= 0x20 and code <= 0x7e:
-        self._data.append(chr(code))
-        pos += 1
-      elif code == 0x0b:  # octal constant (signed)
-        val = 0x100 * bytes[pos+2] + bytes[pos+1]
-        if val >= 0x8000: val = val - 0x10000
-        self._data.append(val)
-        pos += 3
-      elif code == 0x0c:  # hex constant (signed)
-        val = 0x100 * bytes[pos+2] + bytes[pos+1]
-        if val >= 0x8000: val = val - 0x10000
-        self._data.append(val)
-        pos += 3
-      elif code == 0x0d:  # line pointer (unsigned)
-        raise ValueError("line pointer (0x0d) shouldn't occur in saved program.")
-      elif code == 0x0e:  # line number (unsigned)
-        self._data.append(0x100 * bytes[pos+2] + bytes[pos+1])
-        pos += 3
-      elif code == 0x0f:  # one byte constant
-        self._data.append(bytes[pos+1])
-        pos += 2
-      elif code == 0x10:  # Flags constant (unused)
-        raise ValueError("unexpected 0x10 token")
-      elif code >= 0x11 and code <= 0x1b:
-        self._data.append(code - 0x11)
-        pos += 1
-      elif code == 0x1c:  # two byte data constant (signed?)
-        val = 0x100 * bytes[pos+2] + bytes[pos+1]
-        if val >= 0x8000: val = val - 0x10000
-        self._data.append(val)
-        pos += 3
-      elif code == 0x1d:  # four byte floating point constant
-        # TODO(danvk): parse this
-        self._data.append(ParseFloat(bytes[pos+1:pos+5]))
-        pos += 5
-      elif code == 0x1e:  # unused
-        raise ValueError("unexpected 0x1e token")
-      elif code == 0x1f:  # eight byte double value
-        # TODO(danvk): parse this
-        self._data.append(ParseDouble(bytes[pos+1:pos+9]))
-        pos += 9
-      elif tokens.has_key(code):
-        self._data.append(tokens[code])
-        pos += 1
-      elif tokens.has_key(code * 0x100 + bytes[pos+1]):
-        self._data.append(tokens[code * 0x100 + bytes[pos+1]])
-        pos += 2
-      else:
-        raise ValueError("unexpected token: %d" % code)
-    pos += 1  # consume the null byte
-    return [self, pos]
+            if code >= 0x20 and code <= 0x7e:
+                self._data.append(chr(code))
+                pos += 1
+            elif code == 0x0b:    # octal constant (signed)
+                val = 0x100 * bytes[pos+2] + bytes[pos+1]
+                if val >= 0x8000:
+                    val = val - 0x10000
+                self._data.append(val)
+                pos += 3
+            elif code == 0x0c:    # hex constant (signed)
+                val = 0x100 * bytes[pos+2] + bytes[pos+1]
+                if val >= 0x8000:
+                    val = val - 0x10000
+                self._data.append(val)
+                pos += 3
+            elif code == 0x0d:    # line pointer (unsigned)
+                raise ValueError("line pointer (0x0d) shouldn't occur in saved program.")
+            elif code == 0x0e:    # line number (unsigned)
+                self._data.append(0x100 * bytes[pos+2] + bytes[pos+1])
+                pos += 3
+            elif code == 0x0f:    # one byte constant
+                self._data.append(bytes[pos+1])
+                pos += 2
+            elif code == 0x10:    # Flags constant (unused)
+                raise ValueError("unexpected 0x10 token")
+            elif code >= 0x11 and code <= 0x1b:
+                self._data.append(code - 0x11)
+                pos += 1
+            elif code == 0x1c:    # two byte data constant (signed?)
+                val = 0x100 * bytes[pos+2] + bytes[pos+1]
+                if val >= 0x8000:
+                    val = val - 0x10000
+                self._data.append(val)
+                pos += 3
+            elif code == 0x1d:    # four byte floating point constant
+                # TODO(danvk): parse this
+                self._data.append(ParseFloat(bytes[pos+1:pos+5]))
+                pos += 5
+            elif code == 0x1e:    # unused
+                raise ValueError("unexpected 0x1e token")
+            elif code == 0x1f:    # eight byte double value
+                # TODO(danvk): parse this
+                self._data.append(ParseDouble(bytes[pos+1:pos+9]))
+                pos += 9
+            elif code in tokens:
+                self._data.append(tokens[code])
+                pos += 1
+            elif (code * 0x100 + bytes[pos+1]) in tokens:
+                self._data.append(tokens[code * 0x100 + bytes[pos+1]])
+                pos += 2
+            else:
+                raise ValueError("unexpected token: %d" % code)
+        pos += 1    # consume the null byte
+        return [self, pos]
 
-  def __str__(self):
-    return "%5d %s" % (self._line_no, ''.join([str(x) for x in self._data]))
+    def __str__(self):
+        return "%5d %s" % (
+            self._line_no, ''.join([str(x) for x in self._data]))
 
 
-# class representing a gw-basic program
 class gwbasic:
-  def __init__(self):
-    pass
+    """Class representing a gw-basic program"""
+    def __init__(self):
+        pass
 
-  def Parse(self):
-    """Build internal representation of raw_data_"""
-    # First byte had better be 0xff = unprotected
-    bytes = [ord(x) for x in self._raw_data]
-    if bytes[0] != 0xff:
-      self.error_ = "Expected 0xff as first character"
-      return
-    self.SplitLines(bytes)
+    def Parse(self):
+        """Build internal representation of raw_data_"""
+        # First byte had better be 0xff = unprotected
+        bytes = [ord(x) for x in self._raw_data]
+        if bytes[0] != 0xff:
+            self.error_ = "Expected 0xff as first character"
+            return
+        self.SplitLines(bytes)
 
-  def SplitLines(self, bytes):
-    """Form the _lines array by splitting a bytestream on line boundaries."""
-    pos = 1
-    self._lines = []
-    while bytes[pos] != 0x1a:
-      line, num_bytes = gwbasicline.FromBinary(bytes[pos:])
-      if line == None and num_bytes == 2:
-        # This is most likely end of program.
-        pos += num_bytes
-      elif line == None:
-        raise ValueError("Couldn't parse program at position %d" % pos)
-      else:
-        pos += num_bytes
-        self._lines.append(line)
+    def SplitLines(self, bytes):
+        # Form the _lines array by splitting a bytestream on line boundaries.
+        pos = 1
+        self._lines = []
+        while bytes[pos] != 0x1a:
+            line, num_bytes = gwbasicline.FromBinary(bytes[pos:])
+            if line is None and num_bytes == 2:
+                # This is most likely end of program.
+                pos += num_bytes
+            elif line is None:
+                raise ValueError("Couldn't parse program at position %d" % pos)
+            else:
+                pos += num_bytes
+                self._lines.append(line)
 
-  @staticmethod
-  def FromBinary(data):
-    p = gwbasic()
-    p._raw_data = data
-    p.Parse()
-    return p
+    @staticmethod
+    def FromBinary(data):
+        p = gwbasic()
+        p._raw_data = data
+        p.Parse()
+        return p
 
-  def __str__(self):
-    return "\n".join(str(line) for line in self._lines)
+    def __str__(self):
+        return "\n".join(str(line) for line in self._lines)
