@@ -1,6 +1,8 @@
 # gwbasic-decoder
 
-This repo contains Python code which lets you read your old GW-BASIC programs which are stored in binary `.BAS` format.
+[GW-BASIC] (aka GWBASIC or Gee-Whiz Basic) was a BASIC interpreter developed by Microsoft and bundled with MS-DOS until the advent of [QBASIC] with MS-DOS 5.0. GW-BASIC stored programs in memory at a time when memory was very scarce. Hence it used a compact, binary representation of code. It used this same binary format for code saved on disk, which makes it hard to read GW-BASIC programs nowadays.
+
+Or at least it used to. Thanks to [this site][tokens], I was able to write a decoder in Python. Run your `.BAS` file through the script (see below) and you'll get a human-readable version of the program back out. Enjoy!
 
 ## Usage
 
@@ -27,3 +29,7 @@ This repo contains Python code which lets you read your old GW-BASIC programs wh
     160 ON TIMER(1) GOSUB 200
     170 TIMER ON
     175 M=1: H=INT(1+RND*240)
+
+[gw-basic]: http://en.wikipedia.org/wiki/GW-BASIC
+[qbasic]: http://en.wikipedia.org/wiki/QBASIC
+[tokens]: http://www.chebucto.ns.ca/~af380/GW-BASIC-tokens.html
