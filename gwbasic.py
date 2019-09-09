@@ -38,14 +38,32 @@ class gwbasicline:
         # next two bytes are the line number
         self._line_no = 0x100 * bytes[3] + bytes[2]
         pos = 4
+
+        # States that show whether we are inside a REM (comment)
+        # statement or inside quotes.
+        insideRem = False
+        insideQuotes = False
+
         self._data = []
         # TODO(danvk): be more graceful at unexpected end-of-string
         # TODO(danvk): get signed/unsigned correct
         while bytes[pos] != 0:
             code = bytes[pos]
 
-            if code >= 0x20 and code <= 0x7e:
-                self._data.append(chr(code))
+            if code == 0x22 and not insideRem:  # Quote starts or ends
+                # There was no quote escaping. You had to use CHR$() to
+                #   output a quote character.
+                insideQuotes = not insideQuotes
+                self._data.append('"')
+                pos += 1
+            elif code == 0x8f and not insideQuotes:     # REM block starts
+                insideRem = True    # a REM block never ends (inside a line)
+                self._data.append('REM')
+                pos += 1
+            elif insideQuotes or insideRem or (code >= 0x20 and code <= 0x7e):
+                # The encoding was probably "IBM Code Page 437"
+                # TODO: make the encoding a command line parameter
+                self._data.append(chr(code).decode('cp437').encode('utf8'))
                 pos += 1
             elif code == 0x0b:    # octal constant (signed)
                 val = 0x100 * bytes[pos+2] + bytes[pos+1]
