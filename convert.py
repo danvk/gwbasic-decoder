@@ -4,7 +4,7 @@
 import sys
 import codecs
 import traceback
-from gwBasic import gwBasic
+from gwbasic import gwBasic
 
 if __name__ == '__main__':
     # Check the number of parameters
