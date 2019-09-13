@@ -1,4 +1,6 @@
 # class to load GW-BASIC programs
+import re
+import math
 from gwbasic_tokens import tokens
 
 class gwBasicLine:
@@ -19,13 +21,15 @@ class gwBasicLine:
         mantissa = ((self.data[index + 2] | 0x80) << 16) | (self.data[index + 1] << 8) | self.data[index]
 
         if self.data[index + 2] & 0x80:
-            number = - mantissa * 2**exp
+            number = -math.ldexp(mantissa, exp)
         else:
-            number = mantissa * 2**exp
+            number = math.ldexp(mantissa, exp)
 
-        numberStr = str(round(number, 6)) # Must round to 6 digits (from 7) when displaying
+        # Must round to 6 significant figures (from 7) when displaying
+        numberStr = self.CanonizeNumber('%s' % float('%.6g' % number))
+
         # If nothing indicates that this is a float, then add the "!" postfix
-        if not ("." in numberStr or "E" in numberStr):
+        if not ("." in numberStr or "e" in numberStr):
             numberStr += "!"
 
         return numberStr
@@ -40,14 +44,22 @@ class gwBasicLine:
         mantissa = ((self.data[index + 6] | 0x80) << 48) | (self.data[index + 5] << 40) | (self.data[index + 4] << 32)  \
             | (self.data[index + 3] << 24) | (self.data[index + 2] << 16) | (self.data[index + 1] << 8) | self.data[index]
         
-        if self.data[index + 2] & 0x80:
-            number = - mantissa * 2**exp
-        else:
-            number = mantissa * 2**exp
+        # We must always output a positive number for doubles,
+        # because a token for '-' is already added before the negative ones.
+        number = math.ldexp(mantissa, exp)
 
-        numberStr = str(round(number, 16))  # Must round to 16 digits (from 17) when displaying
+        # Doubles always get their postfix '#'
+        # Must round to 16 significant figures (from 17) when displaying
+        numberStr = self.CanonizeNumber('%s' % float('%.16g' % number)) + '#'
 
-        return numberStr + '#'  # Doubles always get their postfixes
+        return numberStr
+
+    # For example 8.0 => 8 | 0.21 => .21 | -0.35 => -.35
+    def CanonizeNumber(self, num: str) -> str:
+        """Make the string representation of numbers follow the GW-Basic standard"""
+        num = re.sub(r'^([\-])*0\.', r'\1.', num)
+        num = re.sub(r'\.0$', '', num)
+        return num
 
     def Parse(self):
         """Forms a new line from the first line contained in the bytestream.
