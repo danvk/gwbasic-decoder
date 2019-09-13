@@ -115,36 +115,42 @@ class gwBasicLine:
                 insideRem = True    # a REM block never ends (inside a line)
                 self._data.append('REM')
                 pos += 1
-            elif code == 0x0b:    # octal constant (signed)
-                val = 0x100 * self.data[pos+2] + self.data[pos+1]
-                if val >= 0x8000:
-                    val = val - 0x10000
-                self._data.append(val)
+            elif code == 0x0b:    # octal constant
+                # signed, but that's not visible in octal representation
+                val1 = str(((self.data[pos + 2] << 2) & 0x04) | (self.data[pos + 1] >> 6))
+                if val1 == '0':
+                    val1 = ''
+                val2 = str((self.data[pos + 1] >> 3) & 0x07)
+                if val1 == '' and val2 == '0':
+                    val2 = ''
+                val3 = str(self.data[pos + 1] & 0x07)
+                
+                self._data.append('&O' + val1 + val2 + val3)
                 pos += 3
-            elif code == 0x0c:    # hex constant (signed)
-                val = 0x100 * self.data[pos+2] + self.data[pos+1]
-                if val >= 0x8000:
-                    val = val - 0x10000
-                self._data.append(val)
+            elif code == 0x0c:    # hex constant
+                # signed, but that's not visible in hexa representation
+                val = '&H' + hex(self.data[pos + 2] << 8 | self.data[pos + 1]).replace('0x', '')
+                self._data.append(val.upper())
                 pos += 3
             elif code == 0x0d:    # line pointer (unsigned)
                 raise ValueError("line pointer (0x0d) shouldn't occur in saved program.")
             elif code == 0x0e:    # line number (unsigned)
-                self._data.append(0x100 * self.data[pos+2] + self.data[pos+1])
+                self._data.append((self.data[pos + 2] << 8) | self.data[pos + 1])
                 pos += 3
             elif code == 0x0f:    # one byte constant
-                self._data.append(self.data[pos+1])
+                self._data.append(self.data[pos + 1])
                 pos += 2
             elif code == 0x10:    # Flags constant (unused)
                 raise ValueError("unexpected 0x10 token")
             elif code >= 0x11 and code <= 0x1b:
                 self._data.append(code - 0x11)
                 pos += 1
-            elif code == 0x1c:    # two byte data constant (signed?)
-                val = 0x100 * self.data[pos+2] + self.data[pos+1]
-                if val >= 0x8000:
-                    val = val - 0x10000
-                self._data.append(val)
+            elif code == 0x1c:    # two byte integer constant (signed)
+                val = ((self.data[pos + 2] & 0x7FFF) << 8) | self.data[pos + 1]
+                if self.data[pos + 2] & 0x8000:
+                    self._data.append(-val)
+                else:
+                    self._data.append(val)
                 pos += 3
             elif code == 0x1d:    # four byte floating point constant
                 self._data.append(self.ParseFloat32(pos + 1))
@@ -157,8 +163,8 @@ class gwBasicLine:
             elif code in tokens:
                 self._data.append(tokens[code])
                 pos += 1
-            elif (code * 0x100 + self.data[pos+1]) in tokens:
-                self._data.append(tokens[code * 0x100 + self.data[pos+1]])
+            elif ((code << 8) | self.data[pos + 1]) in tokens:
+                self._data.append(tokens[(code << 8) | self.data[pos + 1]])
                 pos += 2
             else:
                 raise ValueError("unexpected token: %d" % code)
