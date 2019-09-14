@@ -32,7 +32,7 @@ class gwBasicLine:
         numberStr = self.CanonizeNumber('%s' % float('%.6g' % number))
 
         # If nothing indicates that this is a float, then add the "!" postfix
-        if not ("." in numberStr or "e" in numberStr):
+        if not ("." in numberStr or "E" in numberStr):
             numberStr += "!"
 
         return numberStr
@@ -53,16 +53,17 @@ class gwBasicLine:
 
         # Doubles always get their postfix '#'
         # Must round to 16 significant figures (from 17) when displaying
-        numberStr = self.CanonizeNumber('%s' % float('%.16g' % number)) + '#'
+        # The exponent sign for doubles is 'D' instead of 'E'
+        numberStr = self.CanonizeNumber('%s' % float('%.16g' % number)).replace('E', 'D') + '#'
 
         return numberStr
 
-    # For example 8.0 => 8 | 0.21 => .21 | -0.35 => -.35
+    # For example 8.0 => 8 | 0.21 => .21 | -0.35 => -.35 | 1.7e-5 => 1.7E-5
     def CanonizeNumber(self, num: str) -> str:
         """Make the string representation of numbers follow the GW-Basic standard"""
         num = re.sub(r'^([\-])*0\.', r'\1.', num)
         num = re.sub(r'\.0$', '', num)
-        return num
+        return num.upper()  # Make the "e" exponent upper-case "E"
 
     def GetConsumedByteCount(self) -> int:
         return self.pos - self.lineStart
