@@ -111,7 +111,7 @@ class gwBasicLine:
                 self.pos += 1
                 continue
             elif code == 0x3a and not (insideQuotes or insideRem):
-                if len(self.data) - self.pos > 2:
+                if len(self.data) - self.pos - 1 > 2:
                     if self.data[self.pos + 1] == 0x8f and self.data[self.pos + 2] == 0xd9:
                         # REM block starts
                         # A single quote is an alias for a REM instruction
