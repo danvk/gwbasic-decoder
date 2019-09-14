@@ -10,6 +10,9 @@ class gwBasicLine:
         self.encoding = encoding
         self.lineStart = lineStart
         self.lineNum = 0
+        self.lineBuffer = []
+        self.isEOF = False
+        self.pos = lineStart
     
     # Float binary format: http://www.chebucto.ns.ca/~af380/GW-BASIC-tokens.html
     # Rounding and postfixes: https://www-user.tu-chemnitz.de/~heha/viewchm.php/hs/gwBasic.chm/Chapter6.html
@@ -61,120 +64,143 @@ class gwBasicLine:
         num = re.sub(r'\.0$', '', num)
         return num
 
+    def GetConsumedByteCount(self) -> int:
+        return self.pos - self.lineStart
+
+    def CheckBoundary(self, required: int):
+        if len(self.data) - self.pos - 1 < required:
+            if self.lineNum > 0:
+                raise Exception("Unexpected end of file after line %d" % self.lineNum)
+            else:
+                raise Exception("Unexpected end of file at byte position %s" % hex(self.pos))
+
     def Parse(self):
-        """Forms a new line from the first line contained in the bytestream.
-        Returns a tuple, [gwBasicLine, #bytes consumed]. On error returns None."""
+        """Forms a new line from the first line contained in the bytestream."""
+
+        self.CheckBoundary(2)
 
         # first two bytes are address of next line. Mostly irrelevant, but if
         # they're both zero, this is the end of the program.
         if self.data[self.lineStart] == 0 and self.data[self.lineStart + 1] == 0:
-            return [None, 2]
-
-        if len(self.data) < 4:
-            raise ValueError("Unexpected end of string.")
+            self.isEOF = True
+            return
+        
+        self.pos += 2
+        self.CheckBoundary(2)
 
         # next two bytes are the line number
-        self.lineNum = 0x100 * self.data[self.lineStart + 3] + self.data[self.lineStart + 2]
-        pos = self.lineStart + 4
+        self.lineNum = (self.data[self.lineStart + 3] << 8) | self.data[self.lineStart + 2]
+        self.pos += 2
 
         # States that show whether we are inside a REM (comment)
         # statement or inside quotes.
         insideRem = False
         insideQuotes = False
 
-        self._data = []
-        # TODO(danvk): be more graceful at unexpected end-of-string
-        # TODO(danvk): get signed/unsigned correct
-        while self.data[pos] != 0:
-            code = self.data[pos]
+        self.CheckBoundary(1)
+
+        while self.data[self.pos] != 0:
+            self.CheckBoundary(1)
+            code = self.data[self.pos]
 
             if code == 0x22 and not insideRem:  # Quote starts or ends
                 # There was no quote escaping. You had to use CHR$() to
                 #   output a quote character.
                 insideQuotes = not insideQuotes
-                self._data.append('"')
-                pos += 1
+                self.lineBuffer.append('"')
+                self.pos += 1
                 continue
             elif code == 0x3a and not (insideQuotes or insideRem):
-                if len(self.data) - pos > 2:
-                    if self.data[pos + 1] == 0x8f and self.data[pos + 2] == 0xd9:
+                if len(self.data) - self.pos > 2:
+                    if self.data[self.pos + 1] == 0x8f and self.data[self.pos + 2] == 0xd9:
                         # REM block starts
                         # A single quote is an alias for a REM instruction
                         # It is stored with 3 bytes: 0x3a8fd9
                         insideRem = True    # a REM block never ends (inside a line)
-                        self._data.append("'")
-                        pos += 3
+                        self.lineBuffer.append("'")
+                        self.pos += 3
                         continue
 
             if insideQuotes or insideRem or (code >= 0x20 and code <= 0x7e):
                 # Decode the custom texts using the specified code page
                 codeByte = code.to_bytes(1, byteorder='little', signed=False)
-                self._data.append(codeByte.decode(self.encoding))
-                pos += 1
+                self.lineBuffer.append(codeByte.decode(self.encoding))
+                self.pos += 1
             elif code == 0x8f:     # REM block starts
                 insideRem = True    # a REM block never ends (inside a line)
-                self._data.append('REM')
-                pos += 1
+                self.lineBuffer.append('REM')
+                self.pos += 1
             elif code == 0x0b:    # octal constant
                 # signed, but that's not visible in octal representation
-                val1 = str(((self.data[pos + 2] << 2) & 0x04) | (self.data[pos + 1] >> 6))
+                self.CheckBoundary(2)
+
+                val1 = str(((self.data[self.pos + 2] << 2) & 0x04) | (self.data[self.pos + 1] >> 6))
                 if val1 == '0':
                     val1 = ''
-                val2 = str((self.data[pos + 1] >> 3) & 0x07)
+                val2 = str((self.data[self.pos + 1] >> 3) & 0x07)
                 if val1 == '' and val2 == '0':
                     val2 = ''
-                val3 = str(self.data[pos + 1] & 0x07)
+                val3 = str(self.data[self.pos + 1] & 0x07)
                 
-                self._data.append('&O' + val1 + val2 + val3)
-                pos += 3
+                self.lineBuffer.append('&O' + val1 + val2 + val3)
+                self.pos += 3
             elif code == 0x0c:    # hex constant
                 # signed, but that's not visible in hexa representation
-                val = '&H' + hex(self.data[pos + 2] << 8 | self.data[pos + 1]).replace('0x', '')
-                self._data.append(val.upper())
-                pos += 3
+                self.CheckBoundary(2)
+                val = '&H' + hex(self.data[self.pos + 2] << 8 | self.data[self.pos + 1]).replace('0x', '')
+                self.lineBuffer.append(val.upper())
+                self.pos += 3
             elif code == 0x0d:    # line pointer (unsigned)
                 raise ValueError("line pointer (0x0d) shouldn't occur in saved program.")
             elif code == 0x0e:    # line number (unsigned)
-                self._data.append((self.data[pos + 2] << 8) | self.data[pos + 1])
-                pos += 3
+                self.CheckBoundary(2)
+                self.lineBuffer.append((self.data[self.pos + 2] << 8) | self.data[self.pos + 1])
+                self.pos += 3
             elif code == 0x0f:    # one byte constant
-                self._data.append(self.data[pos + 1])
-                pos += 2
+                self.lineBuffer.append(self.data[self.pos + 1])
+                self.pos += 2
             elif code == 0x10:    # Flags constant (unused)
                 raise ValueError("unexpected 0x10 token")
             elif code >= 0x11 and code <= 0x1b:
-                self._data.append(code - 0x11)
-                pos += 1
+                # Numbers from 0 to 10 have their own tokens
+                self.lineBuffer.append(code - 0x11)
+                self.pos += 1
             elif code == 0x1c:    # two byte integer constant (signed)
-                val = ((self.data[pos + 2] & 0x7FFF) << 8) | self.data[pos + 1]
-                if self.data[pos + 2] & 0x8000:
-                    self._data.append(-val)
+                self.CheckBoundary(2)
+                val = ((self.data[self.pos + 2] & 0x7FFF) << 8) | self.data[self.pos + 1]
+                if self.data[self.pos + 2] & 0x8000:
+                    self.lineBuffer.append(-val)
                 else:
-                    self._data.append(val)
-                pos += 3
+                    self.lineBuffer.append(val)
+                self.pos += 3
             elif code == 0x1d:    # four byte floating point constant
-                self._data.append(self.ParseFloat32(pos + 1))
-                pos += 5
+                self.CheckBoundary(4)
+                self.lineBuffer.append(self.ParseFloat32(self.pos + 1))
+                self.pos += 5
             elif code == 0x1e:    # unused
                 raise ValueError("unexpected 0x1e token")
             elif code == 0x1f:    # eight byte double value
-                self._data.append(self.ParseFloat64(pos + 1))
-                pos += 9
+                self.CheckBoundary(8)
+                self.lineBuffer.append(self.ParseFloat64(self.pos + 1))
+                self.pos += 9
             elif code in tokens:
-                self._data.append(tokens[code])
-                pos += 1
-            elif ((code << 8) | self.data[pos + 1]) in tokens:
-                self._data.append(tokens[(code << 8) | self.data[pos + 1]])
-                pos += 2
+                # 1-byte tokens
+                self.lineBuffer.append(tokens[code])
+                self.pos += 1
+            elif ((code << 8) | self.data[self.pos + 1]) in tokens:
+                # 2-byte tokens
+                # The boundary for that +1 is already checked at the beginning of the loop.
+                self.lineBuffer.append(tokens[(code << 8) | self.data[self.pos + 1]])
+                self.pos += 2
             else:
                 raise ValueError("unexpected token: %d" % code)
 
-        pos += 1    # consume the null byte
-        return [self, pos - self.lineStart]
+        self.pos += 1    # consume the null byte
+        return
 
     def __str__(self):
         return "%5d %s" % (
-            self.lineNum, ''.join([str(x) for x in self._data]))
+            self.lineNum, ''.join([str(x) for x in self.lineBuffer]))
 
 
 class gwBasic:
@@ -189,20 +215,20 @@ class gwBasic:
             raise ValueError("Expected 0xff as first character")
 
     def Parse(self):
-        # Form the _lines array by splitting a bytestream on line boundaries.
+        # Parse the binary data line by line
         pos = 1
         
-        while self.data[pos] != 0x1a:
-            gwLine = gwBasicLine(self.data, self.encoding, pos)
-            line, num_bytes = gwLine.Parse()
+        # Don't test for the 0x1A ending here, because
+        #   the line offset can start with that value.
+        while pos < len(self.data) - 1:
+            line = gwBasicLine(self.data, self.encoding, pos)
+            line.Parse()
 
-            if line is None and num_bytes == 2:
-                # This is most likely end of program.
-                pos += num_bytes
-            elif line is None:
-                raise ValueError("Couldn't parse program at position %d" % pos)
+            if line.isEOF:
+                # Reached the end of the file
+                break
             else:
-                pos += num_bytes
+                pos += line.GetConsumedByteCount()
                 self.lines.append(line)
 
     def __str__(self):

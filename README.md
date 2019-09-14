@@ -46,6 +46,8 @@ The output is exactly the same as in the original GW-Basic.
 
 ## Custom code page for the extended ASCII characters
 
+You can specify an encoding in the second parameter:
+
     $ python convert.py CODEPAGE.BAS cp437
     10 ' IBM Code Page 437
     20 REM Årvíztürö tükörfúrógép
