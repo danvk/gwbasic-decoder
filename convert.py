@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Convert a binary GW-BASIC program into human-readable ASCII.
 
 import sys
