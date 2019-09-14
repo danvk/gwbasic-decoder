@@ -12,7 +12,7 @@ Or at least it used to. Thanks to [this site][tokens], I was able to write a dec
      30 Y=320: X=100
      40 A$="": WHILE+ A$="":A$=INKEY$:WEND
      50 CIRCLE (Y,X),19,0
-     55 IF M<>1 AND RND>0.8 THEN GOSUB 160
+     55 IF M<>1 AND RND>.8 THEN GOSUB 160
      60 IF A$="2" THEN X=X+1
      70 IF A$="8" THEN X=X-1
      80 IF A$="4" THEN Y=Y-2
@@ -29,6 +29,13 @@ Or at least it used to. Thanks to [this site][tokens], I was able to write a dec
     160 ON TIMER(1) GOSUB 200
     170 TIMER ON
     175 M=1: H=INT(1+RND*240)
+    180 RETURN
+    200 IF F=0 THEN R=12
+    210 LINE(G,H)-(R,H),10
+    220 F=1
+    230 R=R+622
+    240 IF R>640 THEN F=0: M=0: TIMER OFF
+    250 RETURN
 
 ## Complete type support
 
