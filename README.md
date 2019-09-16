@@ -53,9 +53,9 @@ The output is exactly the same as in the original GW-Basic.
 
 ## Custom code page for the extended ASCII characters
 
-You can specify an encoding in the second parameter:
+You can specify an encoding in an argument:
 
-    $ python convert.py CODEPAGE.BAS cp437
+    $ python convert.py --encoding cp437 CODEPAGE.BAS
     10 ' IBM Code Page 437
     20 REM Årvíztürö tükörfúrógép
     30 PRINT "sin(α + ß) = sin(α)*cos(ß) + cos(α)*sin(ß)"
