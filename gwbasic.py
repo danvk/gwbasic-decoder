@@ -3,7 +3,7 @@ import re
 import math
 from gwbasic_tokens import tokens
 
-class gwBasicLine:
+class GWBasicLine:
     """class representing a single line of a GW-BASIC program"""
     def __init__(self, data: bytes, encoding: str, lineStart: int):
         self.data = data
@@ -82,7 +82,7 @@ class gwBasicLine:
 
         # first two bytes are address of next line. Mostly irrelevant, but if
         # they're both zero, this is the end of the program.
-        if self.data[self.lineStart] == 0 and self.data[self.lineStart + 1] == 0:
+        if self.data[self.pos] == 0 and self.data[self.pos + 1] == 0:
             self.isEOF = True
             return
         
@@ -90,15 +90,13 @@ class gwBasicLine:
         self.CheckBoundary(2)
 
         # next two bytes are the line number
-        self.lineNum = (self.data[self.lineStart + 3] << 8) | self.data[self.lineStart + 2]
+        self.lineNum = (self.data[self.pos + 1] << 8) | self.data[self.pos]
         self.pos += 2
 
         # States that show whether we are inside a REM (comment)
         # statement or inside quotes.
         insideRem = False
         insideQuotes = False
-
-        self.CheckBoundary(1)
 
         while self.data[self.pos] != 0:
             self.CheckBoundary(1)
@@ -110,19 +108,15 @@ class gwBasicLine:
                 insideQuotes = not insideQuotes
                 self.lineBuffer.append('"')
                 self.pos += 1
-                continue
-            elif code == 0x3a and not (insideQuotes or insideRem):
-                if len(self.data) - self.pos - 1 > 2:
-                    if self.data[self.pos + 1] == 0x8f and self.data[self.pos + 2] == 0xd9:
-                        # REM block starts
-                        # A single quote is an alias for a REM instruction
-                        # It is stored with 3 bytes: 0x3a8fd9
-                        insideRem = True    # a REM block never ends (inside a line)
-                        self.lineBuffer.append("'")
-                        self.pos += 3
-                        continue
-
-            if insideQuotes or insideRem or (code >= 0x20 and code <= 0x7e):
+            elif code == 0x3a and not (insideQuotes or insideRem) and (len(self.data) - self.pos - 1 > 2) \
+                and self.data[self.pos + 1] == 0x8f and self.data[self.pos + 2] == 0xd9:
+                    # REM block starts
+                    # A single quote is an alias for a REM instruction
+                    # It is stored with 3 bytes: 0x3a8fd9
+                    insideRem = True    # a REM block never ends (inside a line)
+                    self.lineBuffer.append("'")
+                    self.pos += 3
+            elif insideQuotes or insideRem or (code >= 0x20 and code <= 0x7e):
                 # Decode the custom texts using the specified code page
                 codeByte = code.to_bytes(1, byteorder='little', signed=False)
                 self.lineBuffer.append(codeByte.decode(self.encoding))
@@ -197,14 +191,13 @@ class gwBasicLine:
                 raise ValueError("unexpected token: %d" % code)
 
         self.pos += 1    # consume the null byte
-        return
 
     def __str__(self):
         return "%5d %s" % (
             self.lineNum, ''.join([str(x) for x in self.lineBuffer]))
 
 
-class gwBasic:
+class GWBasic:
     """Class representing a gw-basic program"""
 
     def __init__(self, data: bytes, encoding: str):
@@ -222,7 +215,7 @@ class gwBasic:
         # Don't test for the 0x1A ending here, because
         #   the line offset can start with that value.
         while pos < len(self.data) - 1:
-            line = gwBasicLine(self.data, self.encoding, pos)
+            line = GWBasicLine(self.data, self.encoding, pos)
             line.Parse()
 
             if line.isEOF:
