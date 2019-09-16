@@ -19,8 +19,7 @@ if __name__ == '__main__':
     except LookupError:
         raise ValueError("Unknown character encoding: %s" % args.encoding)
     
-    filename = sys.argv[1]
-    with open(filename, 'rb') as f:
+    with open(args.source_file, 'rb') as f:
         data = f.read()
         program = GWBasic(data, args.encoding)
         program.Parse()
