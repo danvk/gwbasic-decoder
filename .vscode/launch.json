@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "GAME.BAS"
+                "TYPEDEMO.BAS"
             ]
         }
     ]

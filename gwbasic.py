@@ -18,7 +18,7 @@ class GWBasicLine:
     # Rounding and postfixes: https://www-user.tu-chemnitz.de/~heha/viewchm.php/hs/gwBasic.chm/Chapter6.html
     def _parse_float32(self, index: int) -> str:
         if self._data[index + 3] == 0:
-            return 0
+            return "0"
 
         exp = self._data[index + 3] - 152  #  -152 = -128 + -24 (24 because the significand is behind a decimal dot)
         mantissa = ((self._data[index + 2] | 0x80) << 16) | (self._data[index + 1] << 8) | self._data[index]
@@ -41,7 +41,7 @@ class GWBasicLine:
     # Rounding and postfixes: https://www-user.tu-chemnitz.de/~heha/viewchm.php/hs/gwBasic.chm/Chapter6.html
     def _parse_float64(self, index: int) -> str:
         if self._data[index + 7] == 0:
-            return 0
+            return "0"
 
         exp = self._data[index + 7] - 184  #  -184 = -128 + -56 (56 because the significand is behind a decimal dot)
         mantissa = ((self._data[index + 6] | 0x80) << 48) | (self._data[index + 5] << 40) | (self._data[index + 4] << 32)  \
@@ -51,10 +51,13 @@ class GWBasicLine:
         # because a token for '-' is already added before the negative ones.
         number = math.ldexp(mantissa, exp)
 
-        # Doubles always get their postfix '#'
         # Must round to 16 significant figures (from 17) when displaying
         # The exponent sign for doubles is 'D' instead of 'E'
-        numberStr = self._canonize_number('%s' % float('%.16g' % number)).replace('E', 'D') + '#'
+        numberStr = self._canonize_number('%s' % float('%.16g' % number)).replace('E', 'D')
+        
+        # Doubles only get their postfix '#' when they don't contain the exponentiation letter 'D'
+        if "D" not in numberStr:
+            numberStr += "#"
 
         return numberStr
 
@@ -128,21 +131,23 @@ class GWBasicLine:
             elif code == 0x0b:    # octal constant
                 # signed, but that's not visible in octal representation
                 self._check_boundary(2)
+                value = (self._data[self._pos + 2] << 8) | self._data[self._pos + 1]
+                numerals = []
 
-                val1 = str(((self._data[self._pos + 2] << 2) & 0x04) | (self._data[self._pos + 1] >> 6))
-                if val1 == '0':
-                    val1 = ''
-                val2 = str((self._data[self._pos + 1] >> 3) & 0x07)
-                if val1 == '' and val2 == '0':
-                    val2 = ''
-                val3 = str(self._data[self._pos + 1] & 0x07)
-                
-                self._lineBuffer.append('&O' + val1 + val2 + val3)
+                while value > 0:
+                    numerals.append(str(value & 0x07))
+                    value = value >> 3
+
+                if len(numerals) < 1:
+                    numerals.append("0")
+
+                numerals.reverse()
+                self._lineBuffer.append('&O' + "".join(numerals))
                 self._pos += 3
             elif code == 0x0c:    # hex constant
                 # signed, but that's not visible in hexa representation
                 self._check_boundary(2)
-                val = '&H' + hex(self._data[self._pos + 2] << 8 | self._data[self._pos + 1]).replace('0x', '')
+                val = hex(self._data[self._pos + 2] << 8 | self._data[self._pos + 1]).replace('0x', '&H')
                 self._lineBuffer.append(val.upper())
                 self._pos += 3
             elif code == 0x0d:    # line pointer (unsigned)
