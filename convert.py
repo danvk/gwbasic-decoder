@@ -22,5 +22,5 @@ if __name__ == '__main__':
     with open(args.source_file, 'rb') as f:
         data = f.read()
         program = GWBasic(data, args.encoding)
-        program.Parse()
+        program.parse()
         print(program)
